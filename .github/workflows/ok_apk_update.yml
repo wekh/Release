@@ -1,38 +1,38 @@
-name: OKTV Releae update
+name: OKTV Release update
 
 on:
-  chedule:
+  schedule:
     - cron: '0 0 */1 * *'  # 每1天自动运行
-  workflow_dipatch:
+  workflow_dispatch:
 
-job:
-  update-ok-releae:
-    run-on: ubuntu-latet
+jobs:
+  update-ok-release:
+    runs-on: ubuntu-latest
 
-    tep:
+    steps:
       - name: Checkout repo
-        ue: action/checkout@v3
+        uses: actions/checkout@v3
 
       - name: Set up Python
-        ue: action/etup-python@v4
+        uses: actions/setup-python@v4
         with:
-          python-verion: 3.x
+          python-version: 3.x
 
-      - name: Intall requet
-        run: python -m pip intall --upgrade pip requet
+      - name: Install requests
+        run: python -m pip install --upgrade pip requests
 
-      - name: Download and rename APK, extract firt verion
-        id: download_apk
+      - name: Download and rename APKs, extract first version
+        id: download_apks
         run: |
           python - <<'EOF'
-          import requet, o, re
+          import requests, os, re
 
           OWNER, REPO, PATH = "youhunwl", "TVAPP", "影视/OK影视"
           file_map = {
               "OK影视-电视版-自带X5": "leanback-armeabi_v7a_x5.apk",
               "OK影视-电视版": "leanback-armeabi_v7a.apk",
               "OK影视-手机版": "mobile-arm64_v8a.apk",
-              "海信专版": "Hiene-TV.apk"
+              "海信专版": "Hisense-TV.apk"
           }
           DOWNLOAD_DIR = "ok_apk_update/apks"
           os.makedirs(DOWNLOAD_DIR, exist_ok=True)
