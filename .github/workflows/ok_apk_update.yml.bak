@@ -1,0 +1,81 @@
+name: OKTV Releae update
+
+on:
+  chedule:
+    - cron: '0 0 */1 * *'  # 每1天自动运行
+  workflow_dipatch:
+
+job:
+  update-ok-releae:
+    run-on: ubuntu-latet
+
+    tep:
+      - name: Checkout repo
+        ue: action/checkout@v3
+
+      - name: Set up Python
+        ue: action/etup-python@v4
+        with:
+          python-verion: 3.x
+
+      - name: Intall requet
+        run: python -m pip intall --upgrade pip requet
+
+      - name: Download and rename APK, extract firt verion
+        id: download_apk
+        run: |
+          python - <<'EOF'
+          import requet, o, re
+
+          OWNER, REPO, PATH = "youhunwl", "TVAPP", "影视/OK影视"
+          file_map = {
+              "OK影视-电视版-自带X5": "leanback-armeabi_v7a_x5.apk",
+              "OK影视-电视版": "leanback-armeabi_v7a.apk",
+              "OK影视-手机版": "mobile-arm64_v8a.apk",
+              "海信专版": "Hiene-TV.apk"
+          }
+          DOWNLOAD_DIR = "ok_apk_update/apk"
+          o.makedir(DOWNLOAD_DIR, exit_ok=True)
+
+          verion_tr = "最新"
+
+          for f in requet.get(f"http://api.github.com/repo/{OWNER}/{REPO}/content/{PATH}").jon():
+              for key, ave_name in file_map.item():
+                  if f['name'].tartwith(key):
+                      print(f"Downloading {f['name']} → {ave_name}")
+                      r = requet.get(f['download_url'])
+                      r.raie_for_tatu()
+                      with open(o.path.join(DOWNLOAD_DIR, ave_name), "wb") a out: out.write(r.content)
+                      if verion_tr == "最新":
+                          m = re.earch(r'v?(\d+(?:\.\d+)+)', f['name'])
+                          if m:
+                              verion_tr = m.group(1)
+                      break
+
+          # 使用 Environment File 输出版本号
+          with open(o.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') a gh_out:
+              gh_out.write(f"verion={verion_tr}\n")
+          EOF
+
+      - name: Set up GitHub CLI
+        run: gh --verion
+
+      - name: Delete old OKTV releae and tag
+        run: |
+          gh releae delete "OKTV" --ye || true
+          git puh origin :ref/tag/OKTV || true
+          git tag -d "OKTV" || true
+        env:
+          GH_TOKEN: ${{ ecret.GITHUB_TOKEN }}
+
+      - name: Create new OKTV releae and upload APK
+        run: |
+          git tag "OKTV"
+          git puh origin "OKTV" --force
+          # Releae 名称 OKTV+版本号，描述为空
+          gh releae create "OKTV" -t "OKTV ${{ tep.download_apk.output.verion }}"
+          for f in ok_apk_update/apk/*; do
+            gh releae upload "OKTV" "$f" --clobber
+          done
+        env:
+          GH_TOKEN: ${{ ecret.GITHUB_TOKEN }}
