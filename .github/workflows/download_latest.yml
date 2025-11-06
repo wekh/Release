@@ -1,0 +1,141 @@
+name: Download Latest Files
+
+on:
+  schedule:
+    - cron: '0 0 * * 0' # 每周日的00:00 UTC
+  workflow_dispatch:
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Delete existing Release
+        run: |
+          echo "Checking for existing releases..."
+          releases=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases")
+          release_ids=$(echo "$releases" | jq -r '.[] | select(.tag_name == "latest") | .id')
+
+          for release_id in $release_ids; do
+            echo "Deleting release ID: $release_id"
+            curl -s -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases/$release_id"
+          done
+
+      - name: Create new Release
+        id: create_release
+        run: |
+          TAG_NAME="latest"
+          RELEASE_NAME="Latest Release"
+
+          echo "Creating a new release..."
+          response=$(curl -s -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"tag_name\": \"$TAG_NAME\", \"name\": \"$RELEASE_NAME\"}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases")
+
+          release_id=$(echo "$response" | jq -r '.id')
+          upload_url=$(echo "$response" | jq -r '.upload_url' | sed "s/{?name,label}//")
+
+          echo "release_id=$release_id" >> $GITHUB_ENV
+          echo "upload_url=$upload_url" >> $GITHUB_ENV
+
+      - name: Download v2rayN file
+        run: |
+          echo "Downloading latest v2rayN file..."
+          v2rayN_url="https://api.github.com/repos/2dust/v2rayN/releases/latest"
+          v2rayN_response=$(curl -s "$v2rayN_url")
+          v2rayN_download_url=$(echo "$v2rayN_response" | jq -r ".assets[] | select(.name | contains(\"SelfContained.zip\")) | .browser_download_url")
+
+          if [ -n "$v2rayN_download_url" ]; then
+              curl -s -L -o "SelfContained.zip" "$v2rayN_download_url"
+              echo "SelfContained.zip 下载成功."
+          else
+              echo "未找到文件: SelfContained.zip"
+          fi
+
+      - name: Download v2rayNG file
+        run: |
+          echo "Downloading latest v2rayNG file..."
+          v2rayNG_url="https://api.github.com/repos/2dust/v2rayNG/releases/latest"
+          v2rayNG_response=$(curl -s "$v2rayNG_url")
+          v2rayNG_download_url=$(echo "$v2rayNG_response" | jq -r ".assets[] | select(.name | contains(\"_arm64-v8a.apk\")) | .browser_download_url")
+
+          if [ -n "$v2rayNG_download_url" ]; then
+              curl -s -L -o "v2rayNG.apk" "$v2rayNG_download_url"
+              echo "v2rayNG.apk 下载成功."
+          else
+              echo "未找到文件: v2rayNG.apk"
+          fi
+
+      - name: Download NekoBox file
+        run: |
+          echo "Downloading latest NekoBox file..."
+          nekobox_url="https://api.github.com/repos/MatsuriDayo/NekoBoxForAndroid/releases/latest"
+          nekobox_response=$(curl -s "$nekobox_url")
+          nekobox_download_url=$(echo "$nekobox_response" | jq -r ".assets[] | select(.name | contains(\"arm64-v8a\")) | .browser_download_url")
+
+          if [ -n "$nekobox_download_url" ]; then
+              curl -s -L -o "NekoBox.apk" "$nekobox_download_url"
+              echo "NekoBox.apk 下载成功."
+          else
+              echo "未找到文件: NekoBox.apk"
+          fi
+
+      - name: Download GitHub Desktop file
+        run: |
+          echo "Downloading latest GitHub Desktop file..."
+          githubdesktop_url="https://api.github.com/repos/zetaloop/desktop/releases/latest"
+          githubdesktop_response=$(curl -s "$githubdesktop_url")
+          githubdesktop_file_name="GitHubDesktop-Windows-x64.exe"
+          githubdesktop_download_url=$(echo "$githubdesktop_response" | jq -r ".assets[] | select(.name == \"$githubdesktop_file_name\") | .browser_download_url")
+
+          if [ -n "$githubdesktop_download_url" ]; then
+              curl -s -L -o "$githubdesktop_file_name" "$githubdesktop_download_url"
+              echo "$githubdesktop_file_name 下载成功."
+          else
+              echo "未找到文件: $githubdesktop_file_name"
+          fi
+
+      - name: Upload v2rayN file to Release
+        run: |
+          echo "Uploading v2rayN file..."
+          curl -s -o /dev/null \
+            -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/zip" \
+            --data-binary @"SelfContained.zip" \
+            "${{ env.upload_url }}?name=v2rayN-windows-64-SelfContained.zip"
+
+      - name: Upload v2rayNG file to Release
+        run: |
+          echo "Uploading v2rayNG file..."
+          curl -s -o /dev/null \
+            -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/vnd.android.package-archive" \
+            --data-binary @"v2rayNG.apk" \
+            "${{ env.upload_url }}?name=v2rayNG.apk"
+
+      - name: Upload NekoBox file to Release
+        run: |
+          echo "Uploading NekoBox file..."
+          curl -s -o /dev/null \
+            -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/vnd.android.package-archive" \
+            --data-binary @"NekoBox.apk" \
+            "${{ env.upload_url }}?name=NekoBox.apk"
+
+      - name: Upload GitHub Desktop file to Release
+        run: |
+          echo "Uploading GitHub Desktop file..."
+          curl -s -o /dev/null \
+            -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @"GitHubDesktop-Windows-x64.exe" \
+            "${{ env.upload_url }}?name=GitHubDesktop-Windows-x64.exe"
