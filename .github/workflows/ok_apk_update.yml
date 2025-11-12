@@ -32,7 +32,7 @@ jobs:
 
           OWNER, REPO, PATH = "youhunwl", "TVAPP", "影视/OK影视"
           file_map = {
-              "OK影视-电视版-自带X5": "leanback-armeabi_v7a_x5.apk",
+              "自带X5": "leanback-armeabi_v7a_x5.apk",
               "OK影视-电视版": "leanback-armeabi_v7a.apk",
               "OK影视-手机版": "mobile-arm64_v8a.apk",
               "海信专版": "Hisense-TV.apk"
