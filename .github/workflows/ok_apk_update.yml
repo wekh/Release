@@ -28,14 +28,14 @@ jobs:
         id: download_apk
         run: |
           python - <<'EOF'
-          import requests, os, re
+          import requests, os, re, datetime
 
           OWNER, REPO, PATH = "youhunwl", "TVAPP", "影视/OK影视"
           file_map = {
               "OK影视-电视版-自带X5": "leanback-armeabi_v7a_x5.apk",
               "OK影视-电视版": "leanback-armeabi_v7a.apk",
               "OK影视-手机版": "mobile-arm64_v8a.apk",
-              "海信专版": "Hiene-TV.apk"
+              "海信专版": "Hisense-TV.apk"
           }
 
           DOWNLOAD_DIR = "ok_apk_update/apk"
@@ -60,6 +60,7 @@ jobs:
                               version_str = m.group(1)
                       break
 
+          # 输出版本号供后续步骤使用
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as gh_out:
               gh_out.write(f"version={version_str}\n")
           EOF
@@ -67,27 +68,28 @@ jobs:
       - name: Check GitHub CLI version
         run: gh --version
 
-      - name: Create or update OKTV release and upload new APKs
+      - name: Update or create OKTV release and upload new APKs
         run: |
           TAG="OKTV"
           VERSION="${{ steps.download_apk.outputs.version }}"
           TITLE="OKTV ${VERSION}"
-
+          UPDATED_AT=$(date +"%Y-%m-%d %H:%M CST")
+          
           echo "Checking if release exists..."
           RELEASE_ID=$(gh api "/repos/${{ github.repository }}/releases/tags/$TAG" --jq '.id' 2>/dev/null || echo "")
 
           if [ -z "$RELEASE_ID" ]; then
-            echo "Release not found. Creating new release..."
-            gh release create "$TAG" -t "$TITLE" -n "自动更新版本 ${VERSION}"
+            echo "Release not found. Creating new one..."
+            gh release create "$TAG" -t "$TITLE" -n "自动更新版本 ${VERSION}\n更新时间：${UPDATED_AT}"
           else
-            echo "Release exists. Updating title and body..."
+            echo "Release exists. Updating title, body, and refreshing time..."
             gh api \
               -X PATCH \
               -H "Accept: application/vnd.github+json" \
               "/repos/${{ github.repository }}/releases/$RELEASE_ID" \
               -f tag_name="$TAG" \
               -f name="$TITLE" \
-              -f body="自动更新版本 ${VERSION}"
+              -f body="自动更新版本 ${VERSION}\n更新时间：${UPDATED_AT}"
           fi
 
           echo "Uploading or replacing new APK files..."
