@@ -5,6 +5,9 @@ on:
     - cron: '0 0 */1 * *'  # 每1天自动运行
   workflow_dispatch:
 
+permissions:
+  contents: write  # 允许修改 release 内容
+
 jobs:
   update-ok-release:
     runs-on: ubuntu-latest
@@ -57,7 +60,6 @@ jobs:
                               version_str = m.group(1)
                       break
 
-          # 输出版本号供后续步骤使用
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as gh_out:
               gh_out.write(f"version={version_str}\n")
           EOF
@@ -71,17 +73,18 @@ jobs:
           VERSION="${{ steps.download_apk.outputs.version }}"
           TITLE="OKTV ${VERSION}"
 
-          # 检查 Release 是否存在
-          if ! gh release view "$TAG" &>/dev/null; then
+          echo "Checking if release exists..."
+          RELEASE_ID=$(gh api "/repos/${{ github.repository }}/releases/tags/$TAG" --jq '.id' 2>/dev/null || echo "")
+
+          if [ -z "$RELEASE_ID" ]; then
             echo "Release not found. Creating new release..."
             gh release create "$TAG" -t "$TITLE" -n "自动更新版本 ${VERSION}"
           else
-            echo "Release already exists. Updating title and notes..."
-            # 更新标题和说明（使用 API）
+            echo "Release exists. Updating title and body..."
             gh api \
               -X PATCH \
               -H "Accept: application/vnd.github+json" \
-              "/repos/${{ github.repository }}/releases/tags/$TAG" \
+              "/repos/${{ github.repository }}/releases/$RELEASE_ID" \
               -f tag_name="$TAG" \
               -f name="$TITLE" \
               -f body="自动更新版本 ${VERSION}"
