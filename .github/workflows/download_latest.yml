@@ -48,13 +48,13 @@ jobs:
           echo "Downloading latest v2rayN file..."
           v2rayN_url="https://api.github.com/repos/2dust/v2rayN/releases/latest"
           v2rayN_response=$(curl -s "$v2rayN_url")
-          v2rayN_download_url=$(echo "$v2rayN_response" | jq -r ".assets[] | select(.name | contains(\"SelfContained.zip\")) | .browser_download_url")
+          v2rayN_download_url=$(echo "$v2rayN_response" | jq -r ".assets[] | select(.name | contains(\"v2rayN-windows-64-desktop\")) | .browser_download_url")
 
           if [ -n "$v2rayN_download_url" ]; then
-              curl -s -L -o "SelfContained.zip" "$v2rayN_download_url"
-              echo "SelfContained.zip 下载成功."
+              curl -s -L -o "v2rayN-windows-64-desktop" "$v2rayN_download_url"
+              echo "v2rayN-windows-64-desktop 下载成功."
           else
-              echo "未找到文件: SelfContained.zip"
+              echo "未找到文件: v2rayN-windows-64-desktop"
           fi
 
       - name: Download v2rayNG file
@@ -107,8 +107,8 @@ jobs:
             -X POST \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Content-Type: application/zip" \
-            --data-binary @"SelfContained.zip" \
-            "${{ env.upload_url }}?name=v2rayN-windows-64-SelfContained.zip"
+            --data-binary @"v2rayN-windows-64-desktop" \
+            "${{ env.upload_url }}?name=v2rayN-windows-64-v2rayN-windows-64-desktop"
 
       - name: Upload v2rayNG file to Release
         run: |
