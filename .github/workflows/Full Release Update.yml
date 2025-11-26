@@ -147,8 +147,12 @@ jobs:
 
           echo "$REPO_DESC" > README.md
           echo "" >> README.md
-          echo "OK影视  更新版本 ${OKTV_VERSION} 更新时间：${NEW_TIME}" >> README.md
-          echo "latest Release  更新时间：${NEW_TIME}" >> README.md
+          echo "OK影视" >> README.md
+          echo "更新版本 ${OKTV_VERSION}" >> README.md
+          echo "更新时间：${NEW_TIME}" >> README.md
+          echo "" >> README.md
+          echo "latest Release" >> README.md
+          echo "更新时间：${NEW_TIME}" >> README.md
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
