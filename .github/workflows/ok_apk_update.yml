@@ -60,7 +60,6 @@ jobs:
                               version_str = m.group(1)
                       break
 
-          # 输出版本号供后续步骤使用
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as gh_out:
               gh_out.write(f"version={version_str}\n")
           EOF
@@ -82,7 +81,7 @@ jobs:
             echo "Release not found. Creating new one..."
             gh release create "$TAG" -t "$TITLE" -n "自动更新版本 ${VERSION}\n更新时间：${UPDATED_AT}"
           else
-            echo "Release exists. Updating title, body, and refreshing time..."
+            echo "Release exists. Updating title, body, and time..."
             gh api \
               -X PATCH \
               -H "Accept: application/vnd.github+json" \
@@ -99,3 +98,22 @@ jobs:
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # -------------- 新增：更新 README.md 中的更新时间 ----------------
+      - name: Update README.md time
+        run: |
+          NEW_TIME=$(date +"%Y-%m-%d %H:%M CST")
+          echo "Updating README.md time to: $NEW_TIME"
+
+          # 替换含“更新时间：xxxx”的整行
+          sed -i "s/^更新时间：.*/更新时间：${NEW_TIME}/" README.md
+
+          echo "README.md updated content:"
+          cat README.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add README.md
+          git commit -m "更新 README.md 更新时间为 ${NEW_TIME}" || echo "No changes to commit."
+          git push
