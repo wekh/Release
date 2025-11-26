@@ -1,4 +1,4 @@
-name: OKTV Release update
+name: Full Release Update
 
 on:
   schedule:
@@ -6,14 +6,13 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write  # 允许修改 release 内容
+  contents: write
 
 jobs:
-  update-ok-release:
+  release_update:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v3
 
       - name: Set up Python
@@ -24,8 +23,11 @@ jobs:
       - name: Install requests
         run: python -m pip install --upgrade pip requests
 
-      - name: Download and rename APK, extract first version
-        id: download_apk
+      ##############
+      # OKTV APK下载与Release
+      ##############
+      - name: Download OKTV APKs and extract version
+        id: download_oktv
         run: |
           python - <<'EOF'
           import requests, os, re
@@ -49,7 +51,6 @@ jobs:
           for f in res.json():
               for key, save_name in file_map.items():
                   if f['name'].startswith(key):
-                      print(f"Downloading {f['name']} → {save_name}")
                       r = requests.get(f['download_url'])
                       r.raise_for_status()
                       with open(os.path.join(DOWNLOAD_DIR, save_name), "wb") as out:
@@ -64,56 +65,93 @@ jobs:
               gh_out.write(f"version={version_str}\n")
           EOF
 
-      - name: Check GitHub CLI version
-        run: gh --version
-
-      - name: Update or create OKTV release and upload new APKs
+      - name: Create/Update OKTV Release
         run: |
           TAG="OKTV"
-          VERSION="${{ steps.download_apk.outputs.version }}"
+          VERSION="${{ steps.download_oktv.outputs.version }}"
           UPDATED_AT=$(date +"%Y-%m-%d %H:%M CST")
 
-          echo "Checking if release exists..."
           RELEASE_ID=$(gh api "/repos/${{ github.repository }}/releases/tags/$TAG" --jq '.id' 2>/dev/null || echo "")
 
           if [ -z "$RELEASE_ID" ]; then
             gh release create "$TAG" -t "OKTV ${VERSION}" -n "更新时间：${UPDATED_AT}"
           else
-            gh api \
-              -X PATCH \
-              -H "Accept: application/vnd.github+json" \
+            gh api -X PATCH -H "Accept: application/vnd.github+json" \
               "/repos/${{ github.repository }}/releases/$RELEASE_ID" \
-              -f tag_name="$TAG" \
-              -f name="OKTV ${VERSION}" \
-              -f body="更新时间：${UPDATED_AT}"
+              -f tag_name="$TAG" -f name="OKTV ${VERSION}" -f body="更新时间：${UPDATED_AT}"
           fi
 
-          echo "Uploading APK files..."
           for f in ok_apk_update/apk/*; do
             gh release upload "$TAG" "$f" --clobber
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update README.md time
+      ##############
+      # Latest 软件下载与Release
+      ##############
+      - name: Delete existing latest Release
+        run: |
+          releases=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases")
+          release_ids=$(echo "$releases" | jq -r '.[] | select(.tag_name == "latest") | .id')
+          for release_id in $release_ids; do
+            curl -s -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases/$release_id"
+          done
+
+      - name: Create new latest Release
+        id: create_latest
+        run: |
+          TAG_NAME="latest"
+          RELEASE_NAME="Latest Release"
+          response=$(curl -s -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"tag_name\": \"$TAG_NAME\", \"name\": \"$RELEASE_NAME\"}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases")
+          release_id=$(echo "$response" | jq -r '.id')
+          upload_url=$(echo "$response" | jq -r '.upload_url' | sed "s/{?name,label}//")
+          echo "release_id=$release_id" >> $GITHUB_ENV
+          echo "upload_url=$upload_url" >> $GITHUB_ENV
+
+      - name: Download & Upload Latest Files
+        run: |
+          function download_upload() {
+            REPO=$1
+            MATCH=$2
+            SAVE_NAME=$3
+            MIME=$4
+
+            url="https://api.github.com/repos/$REPO/releases/latest"
+            download_url=$(curl -s "$url" | jq -r ".assets[] | select(.name | contains(\"$MATCH\")) | .browser_download_url")
+
+            if [ -n "$download_url" ]; then
+              curl -s -L -o "$SAVE_NAME" "$download_url"
+              curl -s -X POST \
+                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Content-Type: $MIME" \
+                --data-binary @"$SAVE_NAME" \
+                "${{ env.upload_url }}?name=$SAVE_NAME"
+            fi
+          }
+
+          download_upload "2dust/v2rayN" "SelfContained.zip" "v2rayN-windows-64-SelfContained.zip" "application/zip"
+          download_upload "2dust/v2rayNG" "_arm64-v8a.apk" "v2rayNG.apk" "application/vnd.android.package-archive"
+          download_upload "MatsuriDayo/NekoBoxForAndroid" "arm64-v8a" "NekoBox.apk" "application/vnd.android.package-archive"
+          download_upload "zetaloop/desktop" "GitHubDesktop-Windows-x64.exe" "GitHubDesktop-Windows-x64.exe" "application/octet-stream"
+
+      - name: Update README.md
         run: |
           NEW_TIME=$(date +"%Y-%m-%d %H:%M CST")
-          VERSION="${{ steps.download_apk.outputs.version }}"
+          OKTV_VERSION="${{ steps.download_oktv.outputs.version }}"
           REPO_DESC="这是一个用于存放常用软件安装包的仓库，方便快速下载。"
 
-          echo "Updating README.md..."
-
-          # 直接覆盖生成固定格式 README.md
           echo "$REPO_DESC" > README.md
           echo "" >> README.md
-          echo "自动更新版本 ${VERSION}" >> README.md
-          echo "更新时间：${NEW_TIME}" >> README.md
-
-          echo "README.md updated content:"
-          cat README.md
+          echo "OK影视  更新版本 ${OKTV_VERSION} 更新时间：${NEW_TIME}" >> README.md
+          echo "latest Release  更新时间：${NEW_TIME}" >> README.md
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add README.md
-          git commit -m "自动更新 README.md：版本 ${VERSION}，时间 ${NEW_TIME}" || echo "No changes to commit."
+          git commit -m "自动更新 README.md：OKTV ${OKTV_VERSION}，latest Release 时间 ${NEW_TIME}" || echo "No changes to commit."
           git push
