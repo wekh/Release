@@ -103,38 +103,11 @@ jobs:
 
           echo "Updating README.md..."
 
-          # 如果 README.md 不存在则创建
-          if [ ! -f README.md ]; then
-            echo "$REPO_DESC" > README.md
-            echo "" >> README.md
-            echo "自动更新版本 ${VERSION}" >> README.md
-            echo "更新时间：${NEW_TIME}" >> README.md
-          else
-            # 确保第一行是仓库描述
-            FIRST_LINE=$(sed -n '1p' README.md)
-            if [ "$FIRST_LINE" != "$REPO_DESC" ]; then
-              sed -i "1s|.*|$REPO_DESC|" README.md
-            fi
-
-            # 确保第二行是空行
-            sed -i '2s/.*/ /' README.md
-
-            # 如果缺少第三行自动添加
-            if ! grep -q "自动更新版本" README.md; then
-              echo "自动更新版本 ${VERSION}" >> README.md
-            fi
-
-            # 如果缺少第四行自动添加
-            if ! grep -q "更新时间：" README.md; then
-              echo "更新时间：${NEW_TIME}" >> README.md
-            fi
-
-            # 替换版本行
-            sed -i "s/^自动更新版本.*/自动更新版本 ${VERSION}/" README.md
-
-            # 替换更新时间行
-            sed -i "s/^更新时间：.*/更新时间：${NEW_TIME}/" README.md
-          fi
+          # 直接覆盖生成固定格式 README.md
+          echo "$REPO_DESC" > README.md
+          echo "" >> README.md
+          echo "自动更新版本 ${VERSION}" >> README.md
+          echo "更新时间：${NEW_TIME}" >> README.md
 
           echo "README.md updated content:"
           cat README.md
