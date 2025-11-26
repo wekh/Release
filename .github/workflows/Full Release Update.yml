@@ -74,7 +74,7 @@ jobs:
           RELEASE_ID=$(gh api "/repos/${{ github.repository }}/releases/tags/$TAG" --jq '.id' 2>/dev/null || echo "")
 
           if [ -z "$RELEASE_ID" ]; then
-            gh release create "$TAG" -t "OKTV ${VERSION}" -n "更新时间：${UPDATED_AT}"
+            gh release create "$TAG" -t "OKTV ${VERSION}" -n "更新时间：${UPDATED_AT}" --draft=false
           else
             gh api -X PATCH -H "Accept: application/vnd.github+json" \
               "/repos/${{ github.repository }}/releases/$RELEASE_ID" \
@@ -84,6 +84,10 @@ jobs:
           for f in ok_apk_update/apk/*; do
             gh release upload "$TAG" "$f" --clobber
           done
+
+          # 确保 TAG 已推送到远程
+          git tag -f $TAG
+          git push origin $TAG -f
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -112,6 +116,10 @@ jobs:
           upload_url=$(echo "$response" | jq -r '.upload_url' | sed "s/{?name,label}//")
           echo "release_id=$release_id" >> $GITHUB_ENV
           echo "upload_url=$upload_url" >> $GITHUB_ENV
+
+          # 确保 latest TAG 已推送到远程
+          git tag -f $TAG_NAME
+          git push origin $TAG_NAME -f
 
       - name: Download & Upload Latest Files
         run: |
