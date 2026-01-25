@@ -1,0 +1,78 @@
+name: Get TVBox
+
+on:
+  schedule:
+    - cron: '0 */3 * * *'   # 每3小时运行一次
+      timezone: Asia/Shanghai
+  workflow_dispatch:
+
+jobs:
+  update_tv_box:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests
+
+    - name: Run Python script
+      run: |
+        python - << 'EOF'
+        import re
+        import base64
+        import requests
+        import json
+
+        headers = {'User-Agent': 'okhttp/3.15'}
+
+        url = 'http://www.饭太硬.com/tv/'
+        try:
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+
+            match = re.search(r'[A-Za-z0]{8}\*\*(.*)', response.text)
+            if not match:
+                print("在响应文本中未找到匹配项。")
+            else:
+                result = match.group(1)
+                content = base64.b64decode(result).decode('utf-8')
+
+                print("解析后的内容：")
+                print(content)
+
+                content_lines = content.split('\n')
+                cleaned_content = [line for line in content_lines if not line.strip().startswith("//")]
+                cleaned_content_text = '\n'.join(cleaned_content)
+
+                data = json.loads(cleaned_content_text)
+
+                # 不再修改 data，直接写回解析后的内容
+                original_content = json.dumps(data, indent=2, ensure_ascii=False)
+
+                with open('tvlive/tvbox.txt', 'w', newline='', encoding='utf-8') as f:
+                    f.write(original_content)
+
+                print("已写入原始解析内容到 tvlive/tvbox.txt。")
+
+        except requests.RequestException as e:
+            print("请求失败:", e)
+        except Exception as ex:
+            print("发生错误:", ex)
+        EOF
+
+    - name: Commit 和 push changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add tvlive/tvbox.txt
+        git commit -m "Update TVBox" --allow-empty
+        git push
