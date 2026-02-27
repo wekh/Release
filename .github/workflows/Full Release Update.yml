@@ -14,9 +14,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -33,7 +30,7 @@ jobs:
         id: download_oktv
         run: |
           python - <<'EOF'
-          import requests, os, re, json
+          import requests, os, re
 
           OWNER, REPO, PATH = "youhunwl", "TVAPP", "影视/OK影视"
           file_map = {
@@ -46,50 +43,23 @@ jobs:
           os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
           version_str = "最新"
-          downloaded_files = []
 
-          try:
-              print(f"正在从 {OWNER}/{REPO} 获取文件列表...")
-              res = requests.get(f"https://api.github.com/repos/{OWNER}/{REPO}/contents/{PATH}")
-              res.raise_for_status()
-              files = res.json()
-              
-              print(f"找到 {len(files)} 个文件")
-              
-              for f in files:
-                  for key, save_name in file_map.items():
-                      if f['name'].startswith(key):
-                          print(f"下载: {f['name']} -> {save_name}")
-                          r = requests.get(f['download_url'])
-                          r.raise_for_status()
-                          file_path = os.path.join(DOWNLOAD_DIR, save_name)
-                          with open(file_path, "wb") as out:
-                              out.write(r.content)
-                          downloaded_files.append(file_path)
-                          
-                          if version_str == "最新":
-                              # 尝试匹配多种版本号格式
-                              m = re.search(r'v?(\d+(?:\.\d+)+)', f['name'])
-                              if m:
-                                  version_str = m.group(1)
-                              else:
-                                  m2 = re.search(r'(\d+\.\d+\.\d+)', f['name'])
-                                  if m2:
-                                      version_str = m2.group(1)
-                                  else:
-                                      m3 = re.search(r'(\d+\.\d+)', f['name'])
-                                      if m3:
-                                          version_str = m3.group(1)
+          res = requests.get(f"https://api.github.com/repos/{OWNER}/{REPO}/contents/{PATH}")
+          res.raise_for_status()
+
+          for f in res.json():
+              for key, save_name in file_map.items():
+                  if f['name'].startswith(key):
+                      r = requests.get(f['download_url'])
+                      r.raise_for_status()
+                      with open(os.path.join(DOWNLOAD_DIR, save_name), "wb") as out:
+                          out.write(r.content)
+                      if version_str == "最新":
+                          m = re.search(r'v?(\d+(?:\.\d+)+)', f['name'])
+                          if m:
+                              version_str = m.group(1)
                       break
-              
-              if not downloaded_files:
-                  print("警告: 没有下载任何文件")
-                  
-          except Exception as e:
-              print(f"下载过程出错: {e}")
-              # 继续执行，使用默认版本号
 
-          print(f"提取到的版本号: {version_str}")
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as gh_out:
               gh_out.write(f"version={version_str}\n")
           EOF
@@ -99,40 +69,22 @@ jobs:
           TAG="OKTV"
           VERSION="${{ steps.download_oktv.outputs.version }}"
           UPDATED_AT=$(date +"%Y-%m-%d %H:%M CST")
-          
-          echo "处理 OKTV Release，版本: ${VERSION}"
-          echo "当前时间: ${UPDATED_AT}"
 
-          # 检查是否已存在相同 tag 的 release
           RELEASE_ID=$(gh api "/repos/${{ github.repository }}/releases/tags/$TAG" --jq '.id' 2>/dev/null || echo "")
 
           if [ -z "$RELEASE_ID" ]; then
-            echo "创建新的 OKTV Release"
-            gh release create "$TAG" \
-              --title "OKTV ${VERSION}" \
-              --notes "更新时间：${UPDATED_AT}" \
-              --draft=false
+            gh release create "$TAG" -t "OKTV ${VERSION}" -n "更新时间：${UPDATED_AT}" --draft=false
           else
-            echo "更新现有的 OKTV Release (ID: $RELEASE_ID)"
-            gh api -X PATCH \
-              -H "Accept: application/vnd.github+json" \
+            gh api -X PATCH -H "Accept: application/vnd.github+json" \
               "/repos/${{ github.repository }}/releases/$RELEASE_ID" \
-              -f tag_name="$TAG" \
-              -f name="OKTV ${VERSION}" \
-              -f body="更新时间：${UPDATED_AT}"
+              -f tag_name="$TAG" -f name="OKTV ${VERSION}" -f body="更新时间：${UPDATED_AT}"
           fi
 
-          # 上传 APK 文件
-          if ls ok_apk_update/apk/* 1> /dev/null 2>&1; then
-            for f in ok_apk_update/apk/*; do
-              echo "上传文件: $f"
-              gh release upload "$TAG" "$f" --clobber
-            done
-          else
-            echo "没有找到 APK 文件"
-          fi
+          for f in ok_apk_update/apk/*; do
+            gh release upload "$TAG" "$f" --clobber
+          done
 
-          # 更新 tag
+          # 确保 TAG 已推送到远程
           git tag -f $TAG
           git push origin $TAG -f
         env:
@@ -141,220 +93,76 @@ jobs:
       ##############
       # Latest 软件下载与Release
       ##############
-      - name: Handle latest Release
-        id: handle_latest
+      - name: Delete existing latest Release
+        run: |
+          releases=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases")
+          release_ids=$(echo "$releases" | jq -r '.[] | select(.tag_name == "latest") | .id')
+          for release_id in $release_ids; do
+            curl -s -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases/$release_id"
+          done
+
+      - name: Create new latest Release
+        id: create_latest
         run: |
           TAG_NAME="latest"
-          UPDATED_AT=$(date +"%Y-%m-%d %H:%M CST")
-          CURRENT_BRANCH="${GITHUB_REF#refs/heads/}"
-          
-          echo "处理 latest Release"
-          echo "当前分支: $CURRENT_BRANCH"
-          echo "更新时间: $UPDATED_AT"
-          
-          # 1. 删除本地 tag（如果存在）
-          if git tag -l | grep -q "^$TAG_NAME$"; then
-            echo "删除本地 tag: $TAG_NAME"
-            git tag -d $TAG_NAME
-          fi
-          
-          # 2. 删除远程 tag（如果存在）
-          if git ls-remote --tags origin | grep -q "refs/tags/$TAG_NAME$"; then
-            echo "删除远程 tag: $TAG_NAME"
-            git push origin :refs/tags/$TAG_NAME 2>/dev/null || true
-          fi
-          
-          # 3. 获取并删除所有相关的 release
-          echo "检查现有的 latest releases..."
-          RELEASES=$(gh api "/repos/${{ github.repository }}/releases" --jq '.[] | select(.tag_name == "latest" or .name == "Latest Release") | .id' 2>/dev/null || echo "")
-          
-          if [ -n "$RELEASES" ]; then
-            for RELEASE_ID in $RELEASES; do
-              echo "删除 release ID: $RELEASE_ID"
-              
-              # 先获取并删除该 release 的所有 assets
-              ASSETS=$(gh api "/repos/${{ github.repository }}/releases/$RELEASE_ID/assets" --jq '.[].id' 2>/dev/null || echo "")
-              for ASSET_ID in $ASSETS; do
-                echo "删除 asset ID: $ASSET_ID"
-                gh api -X DELETE "/repos/${{ github.repository }}/releases/assets/$ASSET_ID" 2>/dev/null || true
-              done
-              
-              # 删除 release
-              gh api -X DELETE "/repos/${{ github.repository }}/releases/$RELEASE_ID" || true
-            done
-          else
-            echo "没有找到现有的 latest release"
-          fi
-          
-          # 4. 等待一下确保删除完成
-          echo "等待 3 秒确保删除完成..."
-          sleep 3
-          
-          # 5. 创建新的 tag
-          echo "创建新的 tag: $TAG_NAME"
-          git tag $TAG_NAME
-          
-          # 6. 推送 tag 到远程
-          echo "推送 tag 到远程"
-          git push origin $TAG_NAME
-          
-          # 7. 创建新的 release
-          echo "创建新的 latest Release"
-          gh release create "$TAG_NAME" \
-            --title "Latest Release" \
-            --notes "更新时间：${UPDATED_AT}" \
-            --target "$CURRENT_BRANCH" \
-            --draft=false
-          
-          # 8. 获取 release ID 和上传 URL
-          RELEASE_INFO=$(gh api "/repos/${{ github.repository }}/releases/tags/$TAG_NAME")
-          RELEASE_ID=$(echo "$RELEASE_INFO" | jq -r '.id')
-          UPLOAD_URL="https://uploads.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets"
-          
-          echo "release_id=$RELEASE_ID" >> $GITHUB_ENV
-          echo "upload_url=$UPLOAD_URL" >> $GITHUB_ENV
-          
-          echo "latest Release 创建成功！"
-          echo "Release ID: $RELEASE_ID"
-          echo "Upload URL: $UPLOAD_URL"
-          
-          # 9. 验证创建结果
-          echo "验证 release:"
-          gh release view $TAG_NAME || echo "验证失败，但继续执行"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_NAME="Latest Release"
+          response=$(curl -s -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"tag_name\": \"$TAG_NAME\", \"name\": \"$RELEASE_NAME\"}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases")
+          release_id=$(echo "$response" | jq -r '.id')
+          upload_url=$(echo "$response" | jq -r '.upload_url' | sed "s/{?name,label}//")
+          echo "release_id=$release_id" >> $GITHUB_ENV
+          echo "upload_url=$upload_url" >> $GITHUB_ENV
+
+          # 确保 latest TAG 已推送到远程
+          git tag -f $TAG_NAME
+          git push origin $TAG_NAME -f
 
       - name: Download & Upload Latest Files
         run: |
-          echo "开始下载并上传文件到 latest Release"
-          echo "Upload URL: ${{ env.upload_url }}"
-          
           function download_upload() {
             REPO=$1
-            PATTERN=$2
+            MATCH=$2
             SAVE_NAME=$3
-            CONTENT_TYPE=$4
-            
-            echo ""
-            echo "========================================="
-            echo "处理 $SAVE_NAME 从 $REPO"
-            echo "========================================="
-            
-            # 获取最新 release 信息
-            LATEST_INFO=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              "https://api.github.com/repos/$REPO/releases/latest")
-            
-            if [ $? -ne 0 ] || [ -z "$LATEST_INFO" ] || [ "$LATEST_INFO" = "null" ]; then
-              echo "❌ 无法获取 $REPO 的最新 release 信息"
-              return 1
-            fi
-            
-            # 检查 API 限制
-            REMAINING=$(curl -s -I -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              "https://api.github.com/repos/$REPO/releases/latest" | grep -i "x-ratelimit-remaining" | awk '{print $2}' | tr -d '\r')
-            echo "API 剩余请求: $REMAINING"
-            
-            # 查找匹配的 asset
-            ASSET_URL=$(echo "$LATEST_INFO" | jq -r ".assets[] | select(.name | contains(\"$PATTERN\")) | .browser_download_url" | head -1)
-            
-            if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
-              echo "⚠️ 未找到匹配 '$PATTERN' 的 asset"
-              # 尝试不匹配，直接取第一个
-              ASSET_URL=$(echo "$LATEST_INFO" | jq -r '.assets[0].browser_download_url')
-              if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
-                echo "❌ 没有可用的 asset"
-                return 1
-              fi
-              echo "使用第一个 asset: $ASSET_URL"
-            else
-              echo "找到匹配的 asset: $ASSET_URL"
-            fi
-            
-            # 下载文件
-            echo "下载中..."
-            curl -s -L -o "$SAVE_NAME" "$ASSET_URL"
-            
-            if [ ! -f "$SAVE_NAME" ]; then
-              echo "❌ 下载失败"
-              return 1
-            fi
-            
-            # 检查文件大小
-            FILE_SIZE=$(du -h "$SAVE_NAME" | cut -f1)
-            echo "下载完成，文件大小: $FILE_SIZE"
-            
-            # 上传到 latest Release
-            echo "上传到 latest Release..."
-            RESPONSE=$(curl -s -X POST \
-              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Content-Type: $CONTENT_TYPE" \
-              --data-binary @"$SAVE_NAME" \
-              "${{ env.upload_url }}?name=$SAVE_NAME")
-            
-            if echo "$RESPONSE" | grep -q "errors"; then
-              echo "❌ 上传失败:"
-              echo "$RESPONSE" | jq '.'
-              return 1
-            else
-              echo "✅ 成功上传 $SAVE_NAME"
+            MIME=$4
+
+            url="https://api.github.com/repos/$REPO/releases/latest"
+            download_url=$(curl -s "$url" | jq -r ".assets[] | select(.name | contains(\"$MATCH\")) | .browser_download_url")
+
+            if [ -n "$download_url" ]; then
+              curl -s -L -o "$SAVE_NAME" "$download_url"
+              curl -s -X POST \
+                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Content-Type: $MIME" \
+                --data-binary @"$SAVE_NAME" \
+                "${{ env.upload_url }}?name=$SAVE_NAME"
             fi
           }
 
-          # 下载并上传各个文件（每个失败不会中断整个流程）
-          download_upload "2dust/v2rayN" "v2rayN-windows-64.zip" "v2rayN-windows-64.zip" "application/zip" || true
-          download_upload "2dust/v2rayNG" "arm64-v8a.apk" "v2rayNG.apk" "application/vnd.android.package-archive" || true
-          download_upload "MatsuriDayo/NekoBoxForAndroid" "arm64-v8a" "NekoBox.apk" "application/vnd.android.package-archive" || true
-          download_upload "zetaloop/desktop" "GitHubDesktop-Windows-x64.exe" "GitHubDesktop-Windows-x64.exe" "application/octet-stream" || true
-          
-          echo ""
-          echo "所有文件处理完成"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          download_upload "2dust/v2rayN" "v2rayN-windows-64.zip" "v2rayN-windows-64.zip" "application/zip"
+          download_upload "2dust/v2rayNG" "_arm64-v8a.apk" "v2rayNG.apk" "application/vnd.android.package-archive"
+          download_upload "MatsuriDayo/NekoBoxForAndroid" "arm64-v8a" "NekoBox.apk" "application/vnd.android.package-archive"
+          download_upload "zetaloop/desktop" "GitHubDesktop-Windows-x64.exe" "GitHubDesktop-Windows-x64.exe" "application/octet-stream"
 
       - name: Update README.md
         run: |
           NEW_TIME=$(date +"%Y-%m-%d %H:%M CST")
           OKTV_VERSION="${{ steps.download_oktv.outputs.version }}"
-          
-          echo "更新 README.md"
-          echo "最新版本: ${OKTV_VERSION}"
-          echo "更新时间: ${NEW_TIME}"
+          REPO_DESC="这是一个用于存放常用软件安装包的仓库，方便快速下载。"
 
-          cat > README.md << 'EOF'
-          # Release 仓库
+          echo "$REPO_DESC" > README.md
+          echo "" >> README.md
+          echo "OK影视" >> README.md
+          echo "更新版本 ${OKTV_VERSION}" >> README.md
+          echo "更新时间：${NEW_TIME}" >> README.md
+          echo "" >> README.md
+          echo "latest Release" >> README.md
+          echo "更新时间：${NEW_TIME}" >> README.md
 
-          这是一个用于存放常用软件安装包的仓库，方便快速下载。
-
-          ## OK影视
-          更新版本：__OKTV_VERSION__
-          更新时间：__NEW_TIME__
-
-          ## Latest Release
-          包含以下软件的最新版本：
-          - v2rayN (Windows)
-          - v2rayNG (Android)
-          - NekoBox (Android)
-          - GitHub Desktop (Windows)
-
-          更新时间：__NEW_TIME__
-
-          ---
-          *自动更新于：__NEW_TIME__*
-          EOF
-
-          # 替换版本号和更新时间
-          sed -i "s/__OKTV_VERSION__/${OKTV_VERSION}/g" README.md
-          sed -i "s/__NEW_TIME__/${NEW_TIME}/g" README.md
-
-          # 提交更改
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
           git add README.md
-          if git diff --cached --quiet; then
-            echo "README.md 没有变化，跳过提交"
-          else
-            git commit -m "docs: 更新 README - ${NEW_TIME}"
-            git push
-            echo "README.md 已更新并推送"
-          fi
+          git commit -m "${NEW_TIME}" || echo "No changes to commit."
+          git push
