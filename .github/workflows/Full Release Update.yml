@@ -141,7 +141,7 @@ jobs:
             fi
           }
 
-          download_upload "2dust/v2rayN" "SelfContained.zip" "v2rayN-windows-64-SelfContained.zip" "application/zip"
+          download_upload "2dust/v2rayN" "v2rayN-windows-64.zip" "v2rayN-windows-64.zip" "application/zip"
           download_upload "2dust/v2rayNG" "_arm64-v8a.apk" "v2rayNG.apk" "application/vnd.android.package-archive"
           download_upload "MatsuriDayo/NekoBoxForAndroid" "arm64-v8a" "NekoBox.apk" "application/vnd.android.package-archive"
           download_upload "zetaloop/desktop" "GitHubDesktop-Windows-x64.exe" "GitHubDesktop-Windows-x64.exe" "application/octet-stream"
