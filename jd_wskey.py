@@ -230,29 +230,36 @@ def get_qltoken(username, password, twoFactorSecret):  # 方法 用于获取青�
         # else:  # 无异常执行分支
         #     return token  # 返回 token值
 
-
+def get_latest_file(files):
+    latest_file = None
+    latest_mtime = 0
+    for file in files:
+        try:
+            stats = os.stat(file)
+            mtime = stats.st_mtime
+            if mtime > latest_mtime:
+                latest_mtime = mtime
+                latest_file = file
+        except FileNotFoundError:
+            continue
+    return latest_file
 # 返回值 Token
 def ql_login() -> str:  # 方法 青龙登录(获取Token 功能同上)
-    path = '/ql/config/auth.json'  # 设置青龙 auth文件地址
-    if not os.path.isfile(path):
-        path = '/ql/data/config/auth.json'  # 尝试设置青龙 auth 新版文件地址
-    if not os.path.isfile(path):
-        path_latest = '/ql/data/db/keyv.sqlite'  # 尝试设置青龙 auth 新版文件地址        
-    if os.path.isfile(path) or os.path.isfile(path_latest):  # 进行文件真值判断
-
-        if os.path.isfile(path):
-            with open(path, "r") as file:  # 上下文管理
-                auth = file.read()  # 读取文件
-                file.close()  # 关闭文件            
-            auth = json.loads(auth)  # 使用 json模块读取
-            username = auth["username"]  # 提取 username
-            password = auth["password"]  # 提取 password
-            token = auth["token"]  # 提取 authkey
+    token_file_list = ['/ql/data/db/keyv.sqlite', '/ql/data/config/auth.json', '/ql/config/auth.json']
+    path = get_latest_file(token_file_list)      
+    if os.path.isfile(path):  # 进行文件真值判断
+        if 'keyv' in path:
+            with open(path, "r", encoding="latin1") as file: 
+                auth = file.read()
+                matches = re.search(r'"token":"([^"]*)"(?!.*"token":)', auth)
+                token = matches.group(1)     
         else:
-            with open(path_latest, "r", encoding="latin1") as file: 
-                auth = file.read()  # 读取文件
-                matches = re.search(r'token":"([^"]+)"', auth)
-            token = matches.group(1)        
+            with open(path, "r") as file:
+                auth = file.read()     
+                auth = json.loads(auth) 
+                username = auth["username"]  # 提取 username
+                password = auth["password"]  # 提取 password
+                token = auth["token"]   
 
         try:
             twoFactorSecret = auth["twoFactorSecret"]
