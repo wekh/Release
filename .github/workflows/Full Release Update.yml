@@ -126,7 +126,6 @@ jobs:
 
             url="https://api.github.com/repos/$REPO/releases/latest"
 
-            # ✅ 关键修复：只取第一条，避免 curl (3)
             download_url=$(curl -s "$url" | jq -r ".assets[] | select(.name | contains(\"$MATCH\")) | .browser_download_url" | head -n 1)
 
             if [ -z "$download_url" ] || [ "$download_url" = "null" ]; then
@@ -151,7 +150,6 @@ jobs:
           download_upload "2dust/v2rayN" "v2rayN-windows-64.zip" "v2rayN-windows-64.zip" "application/zip"
           download_upload "2dust/v2rayNG" "_arm64-v8a.apk" "v2rayNG.apk" "application/vnd.android.package-archive"
           download_upload "MatsuriDayo/NekoBoxForAndroid" "arm64-v8a" "NekoBox.apk" "application/vnd.android.package-archive"
-          download_upload "bggRGjQaUbCoE/PiliPlus" "arm64-v8a" "PiliPlus.apk" "application/vnd.android.package-archive"
           download_upload "zetaloop/desktop" "GitHubDesktop-Windows-x64.exe" "GitHubDesktop-Windows-x64.exe" "application/octet-stream"
 
       - name: Update README.md
