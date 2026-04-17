@@ -2,7 +2,7 @@ name: Full Release Update
 
 on:
   schedule:
-    - cron: '0 0 */2 * *'  # 每2天自动运行
+    - cron: '0 0 */2 * *'
   workflow_dispatch:
 
 permissions:
@@ -23,9 +23,9 @@ jobs:
       - name: Install requests
         run: python -m pip install --upgrade pip requests
 
-      ##############
+      ################################
       # OKTV APK下载与Release
-      ##############
+      ################################
       - name: Download OKTV APKs and extract version
         id: download_oktv
         run: |
@@ -84,76 +84,111 @@ jobs:
             gh release upload "$TAG" "$f" --clobber
           done
 
-          # 确保 TAG 已推送到远程
           git tag -f $TAG
           git push origin $TAG -f
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      ##############
-      # Latest 软件下载与Release
-      ##############
+      ################################
+      # latest Release
+      ################################
       - name: Delete existing latest Release
         run: |
           releases=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases")
           release_ids=$(echo "$releases" | jq -r '.[] | select(.tag_name == "latest") | .id')
           for release_id in $release_ids; do
-            curl -s -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases/$release_id"
+            curl -s -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/$release_id"
           done
 
       - name: Create new latest Release
-        id: create_latest
         run: |
           TAG_NAME="latest"
           RELEASE_NAME="Latest Release"
+
           response=$(curl -s -X POST \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d "{\"tag_name\": \"$TAG_NAME\", \"name\": \"$RELEASE_NAME\"}" \
             "https://api.github.com/repos/${{ github.repository }}/releases")
-          release_id=$(echo "$response" | jq -r '.id')
+
           upload_url=$(echo "$response" | jq -r '.upload_url' | sed "s/{?name,label}//")
-          echo "release_id=$release_id" >> $GITHUB_ENV
           echo "upload_url=$upload_url" >> $GITHUB_ENV
 
-          # 确保 latest TAG 已推送到远程
           git tag -f $TAG_NAME
           git push origin $TAG_NAME -f
 
-      - name: Download & Upload Latest Files
+      ################################
+      # 自动下载 + 上传（已去掉 PiliPlus）
+      ################################
+      - name: Download & Upload Latest Files (Auto)
         run: |
-          function download_upload() {
+          process_repo() {
             REPO=$1
-            MATCH=$2
-            SAVE_NAME=$3
-            MIME=$4
+
+            echo "=============================="
+            echo "处理仓库: $REPO"
 
             url="https://api.github.com/repos/$REPO/releases/latest"
-            download_url=$(curl -s "$url" | jq -r ".assets[] | select(.name | contains(\"$MATCH\")) | .browser_download_url")
+            json=$(curl -s "$url")
 
-            if [ -n "$download_url" ]; then
-              curl -s -L -o "$SAVE_NAME" "$download_url"
-              curl -s -X POST \
+            echo "$json" | jq -c '.assets[]' | while read asset; do
+              name=$(echo "$asset" | jq -r '.name')
+              download_url=$(echo "$asset" | jq -r '.browser_download_url')
+
+              case "$name" in
+                *.zip|*.apk|*.exe) ;;
+                *) continue ;;
+              esac
+
+              SAVE_NAME=""
+
+              if [[ "$name" == *v2rayN* && "$name" == *.zip ]]; then
+                SAVE_NAME="v2rayN-windows.zip"
+
+              elif [[ "$name" == *v2rayNG* && "$name" == *.apk ]]; then
+                SAVE_NAME="v2rayNG.apk"
+
+              elif [[ "$name" == *NekoBox* || "$name" == *nekobox* ]]; then
+                SAVE_NAME="NekoBox.apk"
+
+              elif [[ "$name" == *Desktop* || "$name" == *desktop* ]]; then
+                SAVE_NAME="GitHubDesktop.exe"
+
+              else
+                SAVE_NAME="$name"
+              fi
+
+              echo "⬇️ $name → $SAVE_NAME"
+
+              curl -f -L -o "$SAVE_NAME" "$download_url" || exit 1
+
+              echo "⬆️ 上传: $SAVE_NAME"
+
+              curl -f -X POST \
                 -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                -H "Content-Type: $MIME" \
+                -H "Accept: application/vnd.github+json" \
+                -H "Content-Type: application/octet-stream" \
                 --data-binary @"$SAVE_NAME" \
-                "${{ env.upload_url }}?name=$SAVE_NAME"
-            fi
+                "${{ env.upload_url }}?name=$SAVE_NAME" || exit 1
+
+            done
           }
 
-          download_upload "2dust/v2rayN" "v2rayN-windows-64.zip" "v2rayN-windows-64.zip" "application/zip"
-          download_upload "2dust/v2rayNG" "_arm64-v8a.apk" "v2rayNG.apk" "application/vnd.android.package-archive"
-          download_upload "MatsuriDayo/NekoBoxForAndroid" "arm64-v8a" "NekoBox.apk" "application/vnd.android.package-archive"
-          download_upload "bggRGjQaUbCoE/PiliPlus" "arm64-v8a" "PiliPlus.apk" "application/vnd.android.package-archive"
-          download_upload "zetaloop/desktop" "GitHubDesktop-Windows-x64.exe" "GitHubDesktop-Windows-x64.exe" "application/octet-stream"
+          process_repo "2dust/v2rayN"
+          process_repo "2dust/v2rayNG"
+          process_repo "MatsuriDayo/NekoBoxForAndroid"
+          process_repo "desktop/desktop"
 
+      ################################
+      # README 更新
+      ################################
       - name: Update README.md
         run: |
           NEW_TIME=$(date +"%Y-%m-%d %H:%M CST")
           OKTV_VERSION="${{ steps.download_oktv.outputs.version }}"
-          REPO_DESC="这是一个用于存放常用软件安装包的仓库，方便快速下载。"
 
-          echo "$REPO_DESC" > README.md
+          echo "这是一个用于存放常用软件安装包的仓库，方便快速下载。" > README.md
           echo "" >> README.md
           echo "OK影视" >> README.md
           echo "更新版本 ${OKTV_VERSION}" >> README.md
@@ -165,5 +200,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add README.md
-          git commit -m "${NEW_TIME}" || echo "No changes to commit."
+          git commit -m "${NEW_TIME}" || echo "No changes"
           git push
