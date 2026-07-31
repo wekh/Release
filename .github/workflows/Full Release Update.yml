@@ -148,7 +148,23 @@ jobs:
           }
 
           download_upload "2dust/v2rayN" "v2rayN-windows-64.zip" "v2rayN-windows-64.zip" "application/zip"
-          download_upload "2dust/v2rayNG" "_arm64-v8a.apk" "v2rayNG.apk" "application/vnd.android.package-archive"
+          
+          # 修改这里：匹配 arm64-v8a.apk 但排除 -fdroid 版本
+          download_url=$(curl -s "https://api.github.com/repos/2dust/v2rayNG/releases/latest" | jq -r '.assets[] | select(.name | contains("_arm64-v8a.apk") and (.name | contains("-fdroid") | not)) | .browser_download_url' | head -n 1)
+          if [ -n "$download_url" ] && [ "$download_url" != "null" ]; then
+            echo "⬇️ 下载: v2rayNG (常规版)"
+            curl -f -L -o "v2rayNG.apk" "$download_url" || exit 1
+            echo "⬆️ 上传: v2rayNG.apk"
+            curl -f -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "Content-Type: application/vnd.android.package-archive" \
+              --data-binary @"v2rayNG.apk" \
+              "${{ env.upload_url }}?name=v2rayNG.apk" || exit 1
+          else
+            echo "⚠️ 未找到 v2rayNG 常规版 APK"
+          fi
+          
           download_upload "MatsuriDayo/NekoBoxForAndroid" "arm64-v8a" "NekoBox.apk" "application/vnd.android.package-archive"
           download_upload "zetaloop/desktop" "GitHubDesktop-Windows-x64.exe" "GitHubDesktop-Windows-x64.exe" "application/octet-stream"
 
