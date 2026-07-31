@@ -123,10 +123,15 @@ jobs:
             MATCH=$2
             SAVE_NAME=$3
             MIME=$4
+            EXCLUDE=$5
 
             url="https://api.github.com/repos/$REPO/releases/latest"
 
-            download_url=$(curl -s "$url" | jq -r ".assets[] | select(.name | contains(\"$MATCH\")) | .browser_download_url" | head -n 1)
+            if [ -z "$EXCLUDE" ]; then
+              download_url=$(curl -s "$url" | jq -r ".assets[] | select(.name | contains(\"$MATCH\")) | .browser_download_url" | head -n 1)
+            else
+              download_url=$(curl -s "$url" | jq -r ".assets[] | select(.name | contains(\"$MATCH\")) | select(.name | contains(\"$EXCLUDE\") | not) | .browser_download_url" | head -n 1)
+            fi
 
             if [ -z "$download_url" ] || [ "$download_url" = "null" ]; then
               echo "⚠️ 未找到文件: $MATCH"
@@ -147,43 +152,13 @@ jobs:
               "${{ env.upload_url }}?name=$SAVE_NAME" || exit 1
           }
 
-          download_upload "2dust/v2rayN" "v2rayN-windows-64.zip" "v2rayN-windows-64.zip" "application/zip"
+          # v2rayNG - 排除 fdroid 版本
+          download_upload "2dust/v2rayNG" "_arm64-v8a.apk" "v2rayNG.apk" "application/vnd.android.package-archive" "fdroid"
           
-          # 修改这里：使用更健壮的方式获取 v2rayNG 常规版
-          echo "🔍 正在获取 v2rayNG 最新版本信息..."
-          
-          # 先获取完整的 release 信息，并保存到文件以便调试
-          curl -s -H "Accept: application/vnd.github+json" "https://api.github.com/repos/2dust/v2rayNG/releases/latest" > v2rayng_release.json
-          
-          # 检查是否成功获取
-          if [ ! -s v2rayng_release.json ]; then
-            echo "⚠️ 无法获取 v2rayNG release 信息"
-          else
-            # 提取所有 APK 文件，排除 fdroid 版本
-            download_url=$(cat v2rayng_release.json | jq -r '.assets[] | select(.name | test("_arm64-v8a\\.apk$") and (test("-fdroid") | not)) | .browser_download_url' | head -n 1)
-            
-            if [ -n "$download_url" ] && [ "$download_url" != "null" ]; then
-              echo "✅ 找到 v2rayNG 常规版: $(basename $download_url)"
-              echo "⬇️ 下载中..."
-              curl -f -L -o "v2rayNG.apk" "$download_url" || exit 1
-              echo "⬆️ 上传到 Release..."
-              curl -f -X POST \
-                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                -H "Accept: application/vnd.github+json" \
-                -H "Content-Type: application/vnd.android.package-archive" \
-                --data-binary @"v2rayNG.apk" \
-                "${{ env.upload_url }}?name=v2rayNG.apk" || exit 1
-              echo "✅ v2rayNG 上传成功"
-            else
-              echo "⚠️ 未找到 v2rayNG 常规版 APK"
-              # 显示可用的 APK 文件以便调试
-              echo "可用的 APK 文件："
-              cat v2rayng_release.json | jq -r '.assets[] | select(.name | endswith(".apk")) | .name'
-            fi
-          fi
-          
-          download_upload "MatsuriDayo/NekoBoxForAndroid" "arm64-v8a" "NekoBox.apk" "application/vnd.android.package-archive"
-          download_upload "zetaloop/desktop" "GitHubDesktop-Windows-x64.exe" "GitHubDesktop-Windows-x64.exe" "application/octet-stream"
+          # 其他软件
+          download_upload "2dust/v2rayN" "v2rayN-windows-64.zip" "v2rayN-windows-64.zip" "application/zip" ""
+          download_upload "MatsuriDayo/NekoBoxForAndroid" "arm64-v8a" "NekoBox.apk" "application/vnd.android.package-archive" ""
+          download_upload "zetaloop/desktop" "GitHubDesktop-Windows-x64.exe" "GitHubDesktop-Windows-x64.exe" "application/octet-stream" ""
 
       - name: Update README.md
         run: |
