@@ -3,6 +3,7 @@
 echo "========================================="
 echo "  4网口小主机 - 纯安装脚本"
 echo "  不清理，直接创建网桥 + rtp2httpd"
+echo "  固定 IP: 192.168.1.56"
 echo "========================================="
 echo ""
 
@@ -180,6 +181,7 @@ echo "✅ 持久化配置已写入"
 echo ""
 echo "🚀 安装 rtp2httpd..."
 
+# 停止旧容器
 docker stop rtp2httpd 2>/dev/null
 docker rm rtp2httpd 2>/dev/null
 
@@ -231,11 +233,14 @@ BR1_IP=$(ip addr show br1 | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)
 echo ""
 echo "📊 网络配置："
 echo "┌─────────────────────────────────────────┐"
-echo "│ br0: 192.168.1.56                      │"
+echo "│ br0 (主网络/管理口):                    │"
+echo "│   IP: 192.168.1.56                     │"
 echo "│   成员: enp1s0 + enp2s0               │"
 echo "├─────────────────────────────────────────┤"
-echo "│ br1: $BR1_IP                          │"
+echo "│ br1 (IPTV 网络):                       │"
+echo "│   IP: $BR1_IP                          │"
 echo "│   MAC: FC:57:03:4D:39:4E              │"
+echo "│   IPv6: 已禁用                         │"
 echo "│   成员: enp3s0 + enp4s0               │"
 echo "└─────────────────────────────────────────┘"
 
@@ -244,14 +249,36 @@ echo "📊 服务状态："
 docker ps | grep rtp2httpd
 
 echo ""
-echo "🌐 访问地址："
-echo "  状态页面: http://192.168.1.56:8080/status"
+echo "📋 端口监听："
+ss -uln | grep 5140 || echo "⚠️  端口 5140 未监听"
 
 echo ""
+echo "📝 容器日志："
+docker logs rtp2httpd --tail 10
+
+echo ""
+echo "🌐 访问地址："
+echo "  状态页面: http://192.168.1.56:8080/status"
+if [ -n "$BR1_IP" ]; then
+    echo "  RTP 流:   rtp://$BR1_IP:5140"
+fi
+
+echo ""
+echo "📌 管理命令："
+echo "  查看日志: docker logs -f rtp2httpd"
+echo "  重启服务: docker restart rtp2httpd"
+echo "  停止服务: docker stop rtp2httpd"
+
+# ========================================
+# 7. 自动重启
+# ========================================
+echo ""
 echo "========================================="
-echo "  🔄 系统将在 5 秒后重启..."
-echo "  按 Ctrl+C 取消"
+echo "  🔄 系统将在 10 秒后重启..."
+echo "  按 Ctrl+C 取消重启"
 echo "========================================="
 
-sleep 5
-reboot
+sleep 10
+
+# 使用完整路径重启
+/sbin/reboot
