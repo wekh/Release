@@ -314,7 +314,15 @@ echo "  查看日志: docker logs -f rtp2httpd"
 echo "  重启服务: docker restart rtp2httpd"
 echo "  停止服务: docker stop rtp2httpd"
 echo "  重启网络: /usr/local/bin/iptv-setup.sh"
+
+# ========================================
+# 第五部分：自动重启
+# ========================================
 echo ""
 echo "========================================="
-echo "✅ 所有配置完成！"
+echo "  🔄 系统将在 5 秒后重启..."
+echo "  按 Ctrl+C 取消重启"
 echo "========================================="
+
+sleep 5
+reboot
