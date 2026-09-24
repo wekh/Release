@@ -154,11 +154,26 @@ jobs:
 
           # v2rayNG - 排除 fdroid 版本
           download_upload "2dust/v2rayNG" "_arm64-v8a.apk" "v2rayNG.apk" "application/vnd.android.package-archive" "fdroid"
-          
+
           # 其他软件
           download_upload "2dust/v2rayN" "v2rayN-windows-64.zip" "v2rayN-windows-64.zip" "application/zip" ""
           download_upload "MatsuriDayo/NekoBoxForAndroid" "arm64-v8a" "NekoBox.apk" "application/vnd.android.package-archive" ""
           download_upload "zetaloop/desktop" "GitHubDesktop-Windows-x64.exe" "GitHubDesktop-Windows-x64.exe" "application/octet-stream" ""
+
+          ##############
+          # OVSSwitch_x86.fpk (来自 yaya918/FnDepot)
+          ##############
+          echo "⬇️ 下载: OVSSwitch_x86.fpk"
+          curl -f -L -o "OVSSwitch_x86.fpk" \
+            "https://raw.githubusercontent.com/yaya918/FnDepot/main/fpk-ovs-switch-fn/OVSSwitch_x86.fpk" || exit 1
+
+          echo "⬆️ 上传: OVSSwitch_x86.fpk"
+          curl -f -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @"OVSSwitch_x86.fpk" \
+            "${{ env.upload_url }}?name=OVSSwitch_x86.fpk" || exit 1
 
       - name: Update README.md
         run: |
@@ -169,6 +184,9 @@ jobs:
           echo "" >> README.md
           echo "OK影视" >> README.md
           echo "更新版本 ${OKTV_VERSION}" >> README.md
+          echo "更新时间：${NEW_TIME}" >> README.md
+          echo "" >> README.md
+          echo "OVSSwitch_x86.fpk（来源：yaya918/FnDepot）" >> README.md
           echo "更新时间：${NEW_TIME}" >> README.md
           echo "" >> README.md
           echo "latest Release" >> README.md
