@@ -70,11 +70,15 @@ jobs:
           VERSION="${{ steps.download_oktv.outputs.version }}"
           UPDATED_AT=$(date +"%Y-%m-%d %H:%M CST")
 
-          RELEASE_ID=$(gh api "/repos/${{ github.repository }}/releases/tags/$TAG" --jq '.id' 2>/dev/null || echo "")
+          set +e
+          RELEASE_ID=$(gh api "/repos/${{ github.repository }}/releases/tags/$TAG" --jq '.id' 2>/dev/null)
+          set -e
 
-          if [ -z "$RELEASE_ID" ]; then
+          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
+            echo "创建新 Release: $TAG"
             gh release create "$TAG" -t "OKTV ${VERSION}" -n "更新时间：${UPDATED_AT}" --draft=false
           else
+            echo "更新已有 Release: $TAG (ID=$RELEASE_ID)"
             gh api -X PATCH -H "Accept: application/vnd.github+json" \
               "/repos/${{ github.repository }}/releases/$RELEASE_ID" \
               -f tag_name="$TAG" -f name="OKTV ${VERSION}" -f body="更新时间：${UPDATED_AT}"
@@ -111,28 +115,29 @@ jobs:
 
           version_str = "最新"
 
-          # 获取最新 Release
           res = requests.get(f"https://api.github.com/repos/{OWNER}/{REPO}/releases/latest")
           res.raise_for_status()
           release_data = res.json()
 
-          # 提取版本号（从 tag_name 或 name）
           tag_name = release_data.get("tag_name", "")
           release_name = release_data.get("name", "")
           m = re.search(r'v?(\d+(?:\.\d+)+)', tag_name or release_name)
           if m:
               version_str = m.group(1)
 
-          # 下载匹配的 APK
+          print(f"最新版本: {version_str}")
+
           for asset in release_data.get("assets", []):
               asset_name = asset["name"]
+              print(f"检查 asset: {asset_name}")
               for match_name, save_name in file_map.items():
-                  if asset_name == match_name or asset_name.startswith(match_name.replace(".apk", "")):
+                  base = match_name.replace(".apk", "")
+                  if asset_name == match_name or asset_name.startswith(base):
+                      print(f"  匹配成功: {asset_name} -> {save_name}")
                       r = requests.get(asset["browser_download_url"])
                       r.raise_for_status()
                       with open(os.path.join(DOWNLOAD_DIR, save_name), "wb") as out:
                           out.write(r.content)
-                      print(f"下载: {asset_name} -> {save_name}")
                       break
 
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as gh_out:
@@ -145,11 +150,15 @@ jobs:
           VERSION="${{ steps.download_fongmi.outputs.version }}"
           UPDATED_AT=$(date +"%Y-%m-%d %H:%M CST")
 
-          RELEASE_ID=$(gh api "/repos/${{ github.repository }}/releases/tags/$TAG" --jq '.id' 2>/dev/null || echo "")
+          set +e
+          RELEASE_ID=$(gh api "/repos/${{ github.repository }}/releases/tags/$TAG" --jq '.id' 2>/dev/null)
+          set -e
 
-          if [ -z "$RELEASE_ID" ]; then
+          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
+            echo "创建新 Release: $TAG"
             gh release create "$TAG" -t "FongMi ${VERSION}" -n "更新时间：${UPDATED_AT}" --draft=false
           else
+            echo "更新已有 Release: $TAG (ID=$RELEASE_ID)"
             gh api -X PATCH -H "Accept: application/vnd.github+json" \
               "/repos/${{ github.repository }}/releases/$RELEASE_ID" \
               -f tag_name="$TAG" -f name="FongMi ${VERSION}" -f body="更新时间：${UPDATED_AT}"
@@ -173,11 +182,15 @@ jobs:
           NAME="Latest Release"
           UPDATED_AT=$(date +"%Y-%m-%d %H:%M CST")
 
-          RELEASE_ID=$(gh api "/repos/${{ github.repository }}/releases/tags/$TAG" --jq '.id' 2>/dev/null || echo "")
+          set +e
+          RELEASE_ID=$(gh api "/repos/${{ github.repository }}/releases/tags/$TAG" --jq '.id' 2>/dev/null)
+          set -e
 
-          if [ -z "$RELEASE_ID" ]; then
+          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
+            echo "创建新 Release: $TAG"
             gh release create "$TAG" -t "$NAME" -n "更新时间：${UPDATED_AT}" --draft=false
           else
+            echo "更新已有 Release: $TAG (ID=$RELEASE_ID)"
             gh api -X PATCH -H "Accept: application/vnd.github+json" \
               "/repos/${{ github.repository }}/releases/$RELEASE_ID" \
               -f tag_name="$TAG" -f name="$NAME" -f body="更新时间：${UPDATED_AT}"
