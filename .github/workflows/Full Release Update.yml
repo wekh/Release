@@ -192,7 +192,7 @@ jobs:
 
           echo "这是一个用于存放常用软件安装包的仓库，方便快速下载。" > README.md
           echo "" >> README.md
-          echo "OK影视（手动上传，脚本不更新）" >> README.md
+          echo "OK影视（停止更新，最新版本5.1.6）" >> README.md
           echo "" >> README.md
           echo "FongMi（电视版/手机版）" >> README.md
           echo "更新版本 ${FONGMI_VERSION}" >> README.md
