@@ -33,13 +33,13 @@ jobs:
           import requests, os, re
 
           OWNER, REPO = "FongMi", "Release"
-          # 精确匹配：asset 名称完全等于下面的键
-          file_map = {
-              "leanback-arm64_v8a.apk": "FongMi-leanback-arm64_v8a.apk",
-              "leanback-armeabi_v7a.apk": "FongMi-leanback-armeabi_v7a.apk",
-              "mobile-arm64_v8a.apk": "FongMi-mobile-arm64_v8a.apk",
-              "mobile-armeabi_v7a.apk": "FongMi-mobile-armeabi_v7a.apk"
-          }
+          # 精确匹配：asset 名称完全等于下面的名称，保存名也一致
+          file_names = [
+              "leanback-arm64_v8a.apk",
+              "leanback-armeabi_v7a.apk",
+              "mobile-arm64_v8a.apk",
+              "mobile-armeabi_v7a.apk"
+          ]
 
           DOWNLOAD_DIR = "fongmi_apk_update/apk"
           os.makedirs(DOWNLOAD_DIR, exist_ok=True)
@@ -50,6 +50,7 @@ jobs:
           res.raise_for_status()
           release_data = res.json()
 
+          # 从 tag_name 或 name 提取版本号
           tag_name = release_data.get("tag_name", "")
           release_name = release_data.get("name", "")
           m = re.search(r'v?(\d+(?:\.\d+)+)', tag_name or release_name)
@@ -61,20 +62,19 @@ jobs:
           downloaded = 0
           for asset in release_data.get("assets", []):
               asset_name = asset["name"]
-              if asset_name in file_map:
-                  save_name = file_map[asset_name]
-                  print(f"匹配成功: {asset_name} -> {save_name}")
+              if asset_name in file_names:
+                  print(f"匹配成功: {asset_name}")
                   r = requests.get(asset["browser_download_url"])
                   r.raise_for_status()
-                  with open(os.path.join(DOWNLOAD_DIR, save_name), "wb") as out:
+                  with open(os.path.join(DOWNLOAD_DIR, asset_name), "wb") as out:
                       out.write(r.content)
                   downloaded += 1
 
           print(f"共下载 {downloaded} 个文件")
           if downloaded == 0:
-              print("⚠️ 未匹配到任何文件，请检查 FongMi Release 的 asset 名称")
+              print("⚠️ 未匹配到任何文件，实际 asset 如下：")
               for asset in release_data.get("assets", []):
-                  print(f"  实际 asset: {asset['name']}")
+                  print(f"  {asset['name']}")
 
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as gh_out:
               gh_out.write(f"version={version_str}\n")
@@ -83,7 +83,6 @@ jobs:
       - name: Create/Update FongMi Release
         run: |
           TAG="FongMi"
-          VERSION="${{ steps.download_fongmi.outputs.version }}"
           UPDATED_AT=$(date +"%Y-%m-%d %H:%M CST")
 
           set +e
@@ -92,12 +91,12 @@ jobs:
 
           if [ -z "$RELEASE_ID" ] || ! [[ "$RELEASE_ID" =~ ^[0-9]+$ ]]; then
             echo "创建新 Release: $TAG"
-            gh release create "$TAG" -t "FongMi ${VERSION}" -n "更新时间：${UPDATED_AT}" --draft=false
+            gh release create "$TAG" -t "FongMi" -n "更新时间：${UPDATED_AT}" --draft=false
           else
             echo "更新已有 Release: $TAG (ID=$RELEASE_ID)"
             gh api -X PATCH -H "Accept: application/vnd.github+json" \
               "/repos/${{ github.repository }}/releases/$RELEASE_ID" \
-              -f tag_name="$TAG" -f name="FongMi ${VERSION}" -f body="更新时间：${UPDATED_AT}"
+              -f tag_name="$TAG" -f name="FongMi" -f body="更新时间：${UPDATED_AT}"
           fi
 
           for f in fongmi_apk_update/apk/*; do
