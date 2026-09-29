@@ -33,6 +33,7 @@ jobs:
           import requests, os, re
 
           OWNER, REPO = "FongMi", "Release"
+          # 精确匹配：asset 名称完全等于下面的键
           file_map = {
               "leanback-arm64_v8a.apk": "FongMi-leanback-arm64_v8a.apk",
               "leanback-armeabi_v7a.apk": "FongMi-leanback-armeabi_v7a.apk",
@@ -57,18 +58,23 @@ jobs:
 
           print(f"最新版本: {version_str}")
 
+          downloaded = 0
           for asset in release_data.get("assets", []):
               asset_name = asset["name"]
-              print(f"检查 asset: {asset_name}")
-              for match_name, save_name in file_map.items():
-                  base = match_name.replace(".apk", "")
-                  if asset_name == match_name or asset_name.startswith(base):
-                      print(f"  匹配成功: {asset_name} -> {save_name}")
-                      r = requests.get(asset["browser_download_url"])
-                      r.raise_for_status()
-                      with open(os.path.join(DOWNLOAD_DIR, save_name), "wb") as out:
-                          out.write(r.content)
-                      break
+              if asset_name in file_map:
+                  save_name = file_map[asset_name]
+                  print(f"匹配成功: {asset_name} -> {save_name}")
+                  r = requests.get(asset["browser_download_url"])
+                  r.raise_for_status()
+                  with open(os.path.join(DOWNLOAD_DIR, save_name), "wb") as out:
+                      out.write(r.content)
+                  downloaded += 1
+
+          print(f"共下载 {downloaded} 个文件")
+          if downloaded == 0:
+              print("⚠️ 未匹配到任何文件，请检查 FongMi Release 的 asset 名称")
+              for asset in release_data.get("assets", []):
+                  print(f"  实际 asset: {asset['name']}")
 
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as gh_out:
               gh_out.write(f"version={version_str}\n")
@@ -81,10 +87,10 @@ jobs:
           UPDATED_AT=$(date +"%Y-%m-%d %H:%M CST")
 
           set +e
-          RELEASE_ID=$(gh api "/repos/${{ github.repository }}/releases/tags/$TAG" --jq '.id' 2>/dev/null)
+          RELEASE_ID=$(gh api "/repos/${{ github.repository }}/releases/tags/$TAG" 2>/dev/null | jq -r '.id // empty' 2>/dev/null)
           set -e
 
-          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
+          if [ -z "$RELEASE_ID" ] || ! [[ "$RELEASE_ID" =~ ^[0-9]+$ ]]; then
             echo "创建新 Release: $TAG"
             gh release create "$TAG" -t "FongMi ${VERSION}" -n "更新时间：${UPDATED_AT}" --draft=false
           else
@@ -113,10 +119,10 @@ jobs:
           UPDATED_AT=$(date +"%Y-%m-%d %H:%M CST")
 
           set +e
-          RELEASE_ID=$(gh api "/repos/${{ github.repository }}/releases/tags/$TAG" --jq '.id' 2>/dev/null)
+          RELEASE_ID=$(gh api "/repos/${{ github.repository }}/releases/tags/$TAG" 2>/dev/null | jq -r '.id // empty' 2>/dev/null)
           set -e
 
-          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
+          if [ -z "$RELEASE_ID" ] || ! [[ "$RELEASE_ID" =~ ^[0-9]+$ ]]; then
             echo "创建新 Release: $TAG"
             gh release create "$TAG" -t "$NAME" -n "更新时间：${UPDATED_AT}" --draft=false
           else
