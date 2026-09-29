@@ -90,6 +90,81 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       ##############
+      # FONGMI APK下载与Release
+      ##############
+      - name: Download FongMi APKs and extract version
+        id: download_fongmi
+        run: |
+          python - <<'EOF'
+          import requests, os, re
+
+          OWNER, REPO = "FongMi", "Release"
+          file_map = {
+              "leanback-arm64_v8a.apk": "FongMi-leanback-arm64_v8a.apk",
+              "leanback-armeabi_v7a.apk": "FongMi-leanback-armeabi_v7a.apk",
+              "mobile-arm64_v8a.apk": "FongMi-mobile-arm64_v8a.apk",
+              "mobile-armeabi_v7a.apk": "FongMi-mobile-armeabi_v7a.apk"
+          }
+
+          DOWNLOAD_DIR = "fongmi_apk_update/apk"
+          os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
+          version_str = "最新"
+
+          # 获取最新 Release
+          res = requests.get(f"https://api.github.com/repos/{OWNER}/{REPO}/releases/latest")
+          res.raise_for_status()
+          release_data = res.json()
+
+          # 提取版本号（从 tag_name 或 name）
+          tag_name = release_data.get("tag_name", "")
+          release_name = release_data.get("name", "")
+          m = re.search(r'v?(\d+(?:\.\d+)+)', tag_name or release_name)
+          if m:
+              version_str = m.group(1)
+
+          # 下载匹配的 APK
+          for asset in release_data.get("assets", []):
+              asset_name = asset["name"]
+              for match_name, save_name in file_map.items():
+                  if asset_name == match_name or asset_name.startswith(match_name.replace(".apk", "")):
+                      r = requests.get(asset["browser_download_url"])
+                      r.raise_for_status()
+                      with open(os.path.join(DOWNLOAD_DIR, save_name), "wb") as out:
+                          out.write(r.content)
+                      print(f"下载: {asset_name} -> {save_name}")
+                      break
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as gh_out:
+              gh_out.write(f"version={version_str}\n")
+          EOF
+
+      - name: Create/Update FongMi Release
+        run: |
+          TAG="FongMi"
+          VERSION="${{ steps.download_fongmi.outputs.version }}"
+          UPDATED_AT=$(date +"%Y-%m-%d %H:%M CST")
+
+          RELEASE_ID=$(gh api "/repos/${{ github.repository }}/releases/tags/$TAG" --jq '.id' 2>/dev/null || echo "")
+
+          if [ -z "$RELEASE_ID" ]; then
+            gh release create "$TAG" -t "FongMi ${VERSION}" -n "更新时间：${UPDATED_AT}" --draft=false
+          else
+            gh api -X PATCH -H "Accept: application/vnd.github+json" \
+              "/repos/${{ github.repository }}/releases/$RELEASE_ID" \
+              -f tag_name="$TAG" -f name="FongMi ${VERSION}" -f body="更新时间：${UPDATED_AT}"
+          fi
+
+          for f in fongmi_apk_update/apk/*; do
+            gh release upload "$TAG" "$f" --clobber
+          done
+
+          git tag -f $TAG
+          git push origin $TAG -f
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      ##############
       # Latest 软件下载与Release（OKTV 风格：固定 tag，就地更新，--clobber 覆盖）
       ##############
       - name: Create/Update latest Release
@@ -166,11 +241,16 @@ jobs:
         run: |
           NEW_TIME=$(date +"%Y-%m-%d %H:%M CST")
           OKTV_VERSION="${{ steps.download_oktv.outputs.version }}"
+          FONGMI_VERSION="${{ steps.download_fongmi.outputs.version }}"
 
           echo "这是一个用于存放常用软件安装包的仓库，方便快速下载。" > README.md
           echo "" >> README.md
           echo "OK影视" >> README.md
           echo "更新版本 ${OKTV_VERSION}" >> README.md
+          echo "更新时间：${NEW_TIME}" >> README.md
+          echo "" >> README.md
+          echo "FongMi（电视版/手机版）" >> README.md
+          echo "更新版本 ${FONGMI_VERSION}" >> README.md
           echo "更新时间：${NEW_TIME}" >> README.md
           echo "" >> README.md
           echo "OVSSwitch_x86.fpk（来源：yaya918/FnDepot）" >> README.md
