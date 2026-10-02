@@ -181,6 +181,9 @@ jobs:
           # EchoMusic
           download_upload "hoowhoami/EchoMusic" "Windows-Setup-x64.exe" "EchoMusic-Windows-Setup-x64.exe" ""
 
+          # kgmusic_android（文件名带版本号，用前缀匹配）
+          download_upload "umr-xiaomai/kgka_Music_hl" "kgmusic_android" "kgmusic_android.apk" ""
+
           ##############
           # OVSSwitch_x86.fpk (来自 yaya918/FnDepot)
           ##############
