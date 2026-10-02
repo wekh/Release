@@ -172,6 +172,15 @@ jobs:
           download_upload "MatsuriDayo/NekoBoxForAndroid" "arm64-v8a" "NekoBox.apk" ""
           download_upload "zetaloop/desktop" "GitHubDesktop-Windows-x64.exe" "GitHubDesktop-Windows-x64.exe" ""
 
+          # md3Music
+          download_upload "zzyoxml/md3Music" "standard-arm64-v8a.apk" "md3Music-standard-arm64-v8a.apk" ""
+
+          # PiliPlus
+          download_upload "bggRGjQaUbCoE/PiliPlus" "arm64-v8a.apk" "PiliPlus-arm64-v8a.apk" ""
+
+          # EchoMusic
+          download_upload "hoowhoami/EchoMusic" "Windows-Setup-x64.exe" "EchoMusic-Windows-Setup-x64.exe" ""
+
           ##############
           # OVSSwitch_x86.fpk (来自 yaya918/FnDepot)
           ##############
